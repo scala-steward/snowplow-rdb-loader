@@ -19,6 +19,8 @@ import java.io.File
 
 import io.circe.literal._
 
+import com.snowplowanalytics.snowplow.rdbloader.generated.ProjectMetadata
+
 import org.specs2.mutable.Specification
 
 object InvalidEnrichedEventsSpec {
@@ -30,7 +32,7 @@ object InvalidEnrichedEventsSpec {
   val expected = json"""{
     "schema":"iglu:com.snowplowanalytics.snowplow.badrows/loader_parsing_error/jsonschema/2-0-0",
     "data": {
-      "processor":{"artifact":"snowplow-rdb-shredder","version":"0.16.0-rc8"},
+      "processor":{"artifact":"snowplow-rdb-shredder","version":${ProjectMetadata.version}},
       "failure":{
         "type":"RowDecodingError",
         "errors":[

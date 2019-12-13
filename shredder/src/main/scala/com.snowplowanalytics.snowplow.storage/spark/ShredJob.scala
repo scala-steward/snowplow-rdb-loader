@@ -122,14 +122,6 @@ object ShredJob extends SparkJob {
     classOf[Hierarchy],
     classOf[FinalRow],
     classOf[Instant],
-    classOf[com.snowplowanalytics.iglu.core.SchemaVer$Full],
-    classOf[io.circe.JsonObject$LinkedHashMapJsonObject],
-    classOf[io.circe.Json$JObject],
-    classOf[io.circe.Json$JString],
-    classOf[io.circe.Json$JArray],
-    classOf[io.circe.Json$JNull$],
-    classOf[io.circe.Json$JNumber],
-    classOf[io.circe.Json$JBoolean],
     classOf[io.circe.Json],
     Class.forName("io.circe.JsonLong"),
     Class.forName("io.circe.JsonDecimal"),
@@ -137,14 +129,20 @@ object ShredJob extends SparkJob {
     Class.forName("io.circe.JsonBiggerDecimal"),
     Class.forName("io.circe.JsonDouble"),
     Class.forName("io.circe.JsonFloat"),
+    Class.forName("io.circe.Json$JObject"),
+    Class.forName("io.circe.JsonObject$LinkedHashMapJsonObject"),
+    Class.forName("io.circe.Json$JString"),
+    Class.forName("io.circe.Json$JArray"),
+    Class.forName("io.circe.Json$JNull$"),
+    Class.forName("io.circe.Json$JNumber"),
+    Class.forName("io.circe.Json$JBoolean"),
+    Class.forName("com.snowplowanalytics.iglu.core.SchemaVer$Full"),
     classOf[java.util.LinkedHashMap[_, _]],
     classOf[java.util.ArrayList[_]],
-    classOf[scala.collection.immutable.Map$EmptyMap$],
-    classOf[scala.collection.immutable.Set$EmptySet$],
-    classOf[org.apache.spark.internal.io.FileCommitProtocol$TaskCommitMessage],
-    classOf[org.apache.spark.sql.execution.datasources.FileFormatWriter$WriteTaskResult],
     classOf[org.apache.spark.sql.execution.datasources.ExecutedWriteSummary],
-    classOf[org.apache.spark.sql.execution.datasources.BasicWriteTaskStats]
+    classOf[org.apache.spark.sql.execution.datasources.BasicWriteTaskStats],
+    classOf[org.apache.spark.sql.execution.datasources.WriteTaskResult],
+    Class.forName("org.apache.spark.internal.io.FileCommitProtocol$TaskCommitMessage")
   )
 
   def sparkConfig(): SparkConf = new SparkConf()
@@ -194,7 +192,7 @@ object ShredJob extends SparkJob {
              jsonOnly: Boolean): Try[Unit] = {
     manifest match {
       case None =>      // Manifest is not enabled, simply run a job
-        Try(job.run(lengths, eventsManifest, jsonOnly)).map(_ => None)
+        Try(job.run(lengths, eventsManifest, jsonOnly))
       case Some(ShredderManifest(manifest, itemId)) =>   // Manifest is enabled.
         // Envelope job into function to pass to `Manifest.processItem` later
         val process: ProcessNew = () => Try {

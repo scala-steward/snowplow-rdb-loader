@@ -21,6 +21,8 @@ import io.circe.literal._
 
 import org.specs2.mutable.Specification
 
+import com.snowplowanalytics.snowplow.rdbloader.generated.ProjectMetadata
+
 object SchemaValidationFailedSpec {
   import ShredJobSpec._
   val lines = Lines(
@@ -30,7 +32,7 @@ object SchemaValidationFailedSpec {
   val expected = json"""{
     "schema":"iglu:com.snowplowanalytics.snowplow.badrows/loader_iglu_error/jsonschema/2-0-0",
     "data":{
-      "processor":{"artifact":"snowplow-rdb-shredder","version":"0.16.0-rc8"},
+      "processor":{"artifact":"snowplow-rdb-shredder","version":${ProjectMetadata.version}},
       "failure":[
         {"schemaKey":"iglu:com.snowplowanalytics.snowplow/link_click/jsonschema/1-0-0","error":{"error":"ValidationError","dataReports":[{"message":"$$.targetUrl: is missing but it is required","path":"$$","keyword":"required","targets":["targetUrl"]}]}}
       ],

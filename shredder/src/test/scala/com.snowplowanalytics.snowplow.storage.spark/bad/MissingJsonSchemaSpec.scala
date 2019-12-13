@@ -18,7 +18,10 @@ package bad
 import java.io.File
 
 import io.circe.literal._
+
 import org.specs2.mutable.Specification
+
+import com.snowplowanalytics.snowplow.rdbloader.generated.ProjectMetadata
 
 object MissingJsonSchemaSpec {
   import ShredJobSpec._
@@ -31,7 +34,7 @@ object MissingJsonSchemaSpec {
    "data":{
       "processor":{
          "artifact":"snowplow-rdb-shredder",
-         "version":"0.16.0-rc8"
+         "version":${ProjectMetadata.version}
       },
       "failure":[
          {
