@@ -123,7 +123,7 @@ object TrackerInterpreter {
         Left(s"S3 log object [$key] already exists")
       } else {
         val meta = new ObjectMetadata()
-        meta.setContentLength(content.length)
+        meta.setContentLength(content.length.toLong)
         meta.setContentEncoding("text/plain")
 
         val (bucket, prefix) = S3.splitS3Key(key)

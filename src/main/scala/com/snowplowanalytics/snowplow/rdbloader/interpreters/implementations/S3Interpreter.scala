@@ -25,7 +25,7 @@ import com.snowplowanalytics.snowplow.rdbloader.S3.{Folder, splitS3Key, splitS3P
 import com.snowplowanalytics.snowplow.rdbloader.config.SnowplowConfig.SnowplowAws
 import com.snowplowanalytics.snowplow.rdbloader.{LoaderError, S3}
 
-import scala.collection.convert.wrapAsScala._
+import scala.collection.convert.ImplicitConversionsToScala._
 import scala.util.control.NonFatal
 
 // This project

@@ -200,7 +200,6 @@ class ManifestDiscoverySpec extends Specification { def is = s2"""
       Record(base1, shredderApp13, newId, None, State.New, time, author, None),
       Record(base1, shredderApp13, id2, None, State.Processing, time.plusSeconds(10), author, None),
       Record(base1, shredderApp13, newId, Some(id2), State.Failed, time.plusSeconds(20), author, payload1.some))
-    val item1 = Item(NonEmptyList.fromListUnsafe(records.slice(0, 3)))
 
     val action = ManifestDiscovery.discover(targetId, "us-east-1", None)
     val result = action.value.foldMap(ManifestDiscoverySpec.interpreter(records))

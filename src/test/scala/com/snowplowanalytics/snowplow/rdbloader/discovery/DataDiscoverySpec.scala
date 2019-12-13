@@ -17,7 +17,6 @@ import java.util.UUID
 
 import cats.data.State
 import cats.{Id, ~>}
-import cats.syntax.either._
 
 import org.specs2.Specification
 

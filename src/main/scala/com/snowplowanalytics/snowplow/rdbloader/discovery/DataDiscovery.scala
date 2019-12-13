@@ -216,7 +216,7 @@ object DataDiscovery {
     if (atomicKeys.nonEmpty) {
       val shreddedData = shreddedKeys.map(_.info).distinct
       val size = Some(atomicKeys.foldMap(_.size))
-      DataDiscovery(base, Some(atomicKeys.length), size, shreddedData, false, None).validNel
+      DataDiscovery(base, Some(atomicKeys.length.toLong), size, shreddedData, false, None).validNel
     } else {
       DiscoveryFailure.AtomicDiscoveryFailure(base).invalidNel
     }

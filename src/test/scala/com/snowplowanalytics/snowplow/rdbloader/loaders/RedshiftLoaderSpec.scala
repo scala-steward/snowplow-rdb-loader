@@ -560,7 +560,7 @@ class RedshiftLoaderSpec extends Specification { def is = s2"""
           case LoaderA.ExecuteUpdate(query) if query.startsWith("COPY") =>
             Left(LoaderError.StorageTargetError("Test failure"))
 
-          case LoaderA.Print(m) =>
+          case LoaderA.Print(_) =>
             ()
 
           case LoaderA.ManifestProcess(i, action) =>

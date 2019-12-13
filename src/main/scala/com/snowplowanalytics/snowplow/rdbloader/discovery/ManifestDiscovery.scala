@@ -105,7 +105,7 @@ object ManifestDiscovery {
                      id: UUID,
                      region: String,
                      jsonpathAssets: Option[S3.Folder]): LoaderAction[DataDiscovery] = {
-    val itemA: ActionE[Item] = LoaderA.manifestDiscover(getLoaderApp(id), ShredderApp, (folderPredicate(id, folder)(_)).some).map {
+    val itemA: ActionE[Item] = LoaderA.manifestDiscover(getLoaderApp(id), ShredderApp, (folderPredicate(folder)(_)).some).map {
       case Right(h :: _) => h.asRight[LoaderError]
       case Right(Nil) => DiscoveryError(DiscoveryFailure.NoDataFailure(folder) :: Nil).asLeft[Item]
       case Left(error) => error.asLeft
@@ -119,7 +119,7 @@ object ManifestDiscovery {
   }
 
   /** Secondary predicate, deciding if `Item` is the one we're looking for */
-  def folderPredicate(id: UUID, folder: S3.Folder)(item: Item): Boolean =
+  def folderPredicate(folder: S3.Folder)(item: Item): Boolean =
     item.id === folder
 
   /** Get only shredder-"consumed" items */

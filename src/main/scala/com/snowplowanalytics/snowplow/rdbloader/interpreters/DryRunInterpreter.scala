@@ -29,7 +29,6 @@ import io.circe.Json
 import com.amazonaws.services.s3.AmazonS3
 
 import com.snowplowanalytics.iglu.client.Client
-import com.snowplowanalytics.snowplow.scalatracker.Tracker
 
 import com.snowplowanalytics.manifest.core.{ManifestError, ProcessingManifest, LockHandler}
 
@@ -54,7 +53,6 @@ import implementations.ManifestInterpreter.ManifestE
   */
 class DryRunInterpreter private[interpreters](cliConfig: CliConfig,
                                               amazonS3: AmazonS3,
-                                              tracker: Option[Tracker[Id]],
                                               igluClient: Client[Id, Json]) extends Interpreter {
 
   private val logQueries = ListBuffer.empty[SqlString]

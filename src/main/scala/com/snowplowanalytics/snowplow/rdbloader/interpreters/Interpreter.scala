@@ -46,7 +46,7 @@ object Interpreter {
     val tracker = TrackerInterpreter.initializeTracking(cliConfig.configYaml.monitoring)
 
     if (cliConfig.dryRun) {
-      new DryRunInterpreter(cliConfig, amazonS3, tracker, resolver)
+      new DryRunInterpreter(cliConfig, amazonS3, resolver)
     } else {
       new RealWorldInterpreter(cliConfig, amazonS3, tracker, resolver)
     }
