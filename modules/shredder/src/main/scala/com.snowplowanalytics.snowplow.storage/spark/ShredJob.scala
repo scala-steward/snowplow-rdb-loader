@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2019 Snowplow Analytics Ltd. All rights reserved.
+ * Copyright (c) 2012-2020 Snowplow Analytics Ltd. All rights reserved.
  *
  * This program is licensed to you under the Apache License Version 2.0,
  * and you may not use this file except in compliance with the Apache License Version 2.0.
@@ -42,6 +42,10 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 // AWS SDK
 import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughputExceededException
+import com.amazonaws.services.sqs.{AmazonSQS, AmazonSQSClientBuilder}
+import com.amazonaws.{AmazonClientException, AmazonWebServiceRequest, ClientConfiguration}
+import com.amazonaws.retry.RetryPolicy.RetryCondition
+import com.amazonaws.retry.{PredefinedBackoffStrategies, RetryPolicy}
 
 import com.snowplowanalytics.snowplow.analytics.scalasdk.{ Event, ParsingError }
 import com.snowplowanalytics.snowplow.analytics.scalasdk.SnowplowEvent.Contexts
@@ -49,11 +53,12 @@ import com.snowplowanalytics.snowplow.badrows.{ BadRow, Processor, Payload, Fail
 import com.snowplowanalytics.snowplow.eventsmanifest.{ EventsManifest, EventsManifestConfig }
 
 // Snowplow
-import com.snowplowanalytics.iglu.core.SchemaVer
-import com.snowplowanalytics.iglu.core.{ SchemaKey, SelfDescribingData }
+import com.snowplowanalytics.iglu.core.{ SchemaKey, SchemaVer, SelfDescribingData }
 import com.snowplowanalytics.iglu.client.{ Client, ClientError }
 import rdbloader.common._
 import rdbloader.generated.ProjectMetadata
+import com.amazonaws.services.sqs.AmazonSQSClientBuilder
+import com.amazonaws.services.sqs.model.SendMessageRequest
 
 /** Helpers method for the shred job */
 object ShredJob extends SparkJob {
@@ -61,6 +66,10 @@ object ShredJob extends SparkJob {
   private val StartTime = Instant.now()
 
   val processor = Processor(ProjectMetadata.name, ProjectMetadata.version)
+
+  final val SQS_MAX_RETRIES = 10
+  final val SQS_RETRY_BASE_DELAY = 1000 // milliseconds
+  final val SQS_RETRY_MAX_DELAY = 20 * 1000 // milliseconds
 
   val DuplicateSchema = SchemaKey("com.snowplowanalytics.snowplow", "duplicate", "jsonschema", SchemaVer.Full(1,0,0))
 
@@ -163,6 +172,9 @@ object ShredJob extends SparkJob {
         throw new RuntimeException(s"RDB Shredder could not fetch ${AtomicSchema.toSchemaUri} schema at initialization. ${(error: ClientError).show}")
     }
 
+
+    val sqsClient: AmazonSQS = createSqsClient()
+
     val eventsManifest: Option[EventsManifestConfig] = shredConfig.duplicateStorageConfig.map { json =>
       val config = EventsManifestConfig
         .parseJson[Id](singleton.IgluSingleton.get(shredConfig.igluConfig), json)
@@ -171,7 +183,17 @@ object ShredJob extends SparkJob {
       config
     }
 
-    job.run(atomicLengths, eventsManifest)
+    val shreddedTypes = job.run(atomicLengths, eventsManifest)
+    val sqsMessage: SendMessageRequest =
+      new SendMessageRequest()
+        .withQueueUrl(shredConfig.sqsQueue)
+        .withMessageBody(SqsMessage(shreddedTypes.toList).compact)
+    Either.catchNonFatal(sqsClient.sendMessage(sqsMessage)) match {
+      case Left(e) =>
+        throw new RuntimeException(s"RDB Shredder could not send shredded types [$shreddedTypes] to SQS with error [${e.getMessage}]")
+      case _ =>
+        ()
+    }
   }
 
   /**
@@ -252,7 +274,30 @@ object ShredJob extends SparkJob {
         }
       case _ => Right(true)
     }
+  }
 
+  /** Create SQS client with built-in retry mechanism (jitter) */
+  private def createSqsClient(): AmazonSQS = {
+    AmazonSQSClientBuilder
+      .standard()
+      .withClientConfiguration(
+        new ClientConfiguration().withRetryPolicy(
+          new RetryPolicy(
+            new RetryCondition {
+              override def shouldRetry(
+                originalRequest: AmazonWebServiceRequest,
+                exception: AmazonClientException,
+                retriesAttempted: Int
+              ): Boolean =
+                retriesAttempted < SQS_MAX_RETRIES
+            },
+            new PredefinedBackoffStrategies.FullJitterBackoffStrategy(SQS_RETRY_BASE_DELAY, SQS_RETRY_MAX_DELAY),
+            SQS_MAX_RETRIES,
+            true
+          )
+        )
+      )
+      .build
   }
 }
 
@@ -270,10 +315,44 @@ class ShredJob(@transient val spark: SparkSession, shredConfig: ShredJobConfig) 
   val shreddedTypes = new StringSetAccumulator
   sc.register(shreddedTypes)
 
+  // Accumulator to track shredded types
+  val shreddedTypesSqs = new ShreddedTypesAccumulator
+  sc.register(shreddedTypesSqs)
+
   /** Save set of found shredded types into accumulator if processing manifest is enabled */
   def recordPayload(inventory: Set[SchemaKey]): Unit =
     if (shredConfig.dynamodbManifestTable.isEmpty) ()
     else shreddedTypes.add(inventory.map(_.toSchemaUri))
+
+  /** Save set of shredded types into accumulator, for master to send to SQS */
+  def recordShreddedType(inventory: Set[SchemaKey]): Unit = {
+    def getFullPath(root: String, schema: SchemaKey) =
+      List(
+        root,
+        "/vendor=",
+        schema.vendor,
+        "/name=",
+        schema.name,
+        "/format=",
+        schema.format,
+        "/version=",
+        schema.version.model.toString
+      ).mkString
+
+    val withPathAndFormat: Set[ShreddedType] =
+      inventory
+        .map { schemaKey =>
+          shredConfig.storage.flatMap(_.blacklistTabular).map(c => c.exists(_.matches(schemaKey))) match {
+            case Some(true) =>
+              val path = getFullPath(ShredJob.getShreddedTypesOutputPath(shredConfig.outFolder, true), schemaKey)
+              ShreddedType(schemaKey, path, ShreddedFormat.Json)
+            case _ =>
+              val path = getFullPath(ShredJob.getShreddedTypesOutputPath(shredConfig.outFolder, false), schemaKey)
+              ShreddedType(schemaKey, path, ShreddedFormat.Tsv)
+          }
+        }
+    shreddedTypesSqs.add(withPathAndFormat)
+  }
 
   /** Check if `shredType` should be transformed into TSV */
   def isTabular(shredType: SchemaKey): Boolean =
@@ -296,7 +375,7 @@ class ShredJob(@transient val spark: SparkSession, shredConfig: ShredJobConfig) 
    *  - writing out JSON contexts as well as properly-formed and malformed events
    */
   def run(atomicLengths: Map[String, Int],
-          eventsManifest: Option[EventsManifestConfig]): Unit = {
+          eventsManifest: Option[EventsManifestConfig]): Set[ShreddedType] = {
     import ShredJob._
 
     def shred(event: Event): Either[BadRow, FinalRow] =
@@ -349,6 +428,7 @@ class ShredJob(@transient val spark: SparkSession, shredConfig: ShredJobConfig) 
       .flatMap { case (_, s) =>
         val first = s.minBy(_.etl_tstamp)
         recordPayload(first.inventory.map(_.schemaKey))
+        recordShreddedType(first.inventory.map(_.schemaKey))
         dedupeCrossBatch(first, batchTimestamp, DuplicateStorageSingleton.get(eventsManifest)) match {
           case Right(unique) if unique => Some(Right(first))
           case Right(_) => None
@@ -415,5 +495,12 @@ class ShredJob(@transient val spark: SparkSession, shredConfig: ShredJobConfig) 
       .write
       .mode(SaveMode.Overwrite)
       .text(shredConfig.badFolder)
+
+    if (shreddedTypesSqs.value.nonEmpty) {
+      val atomicPath = getAlteredEnrichedOutputPath(shredConfig.outFolder)
+      val shreddedAtomic = ShreddedType(AtomicSchema, atomicPath, ShreddedFormat.Tsv)
+      (shreddedTypesSqs.value + shreddedAtomic).toSet
+    } else
+      shreddedTypesSqs.value.toSet
   }
 }
